@@ -6,3 +6,4 @@ inventory.
 Done at TIP '88 under the wonderful Owen Astrachan
 
 * Language: Turbo Pascal
+* Date 6/24/88
