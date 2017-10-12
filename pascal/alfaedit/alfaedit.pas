@@ -4,6 +4,8 @@ uses Crt,Graph,Dos;
 
 const
    MAXSTATES=256;
+   ALPHALENGTH=2;
+   ALPHABET:string='01';
    DidTrace:boolean=false;
    CharHeight:integer=8;
    InGr:boolean = false;
@@ -12,15 +14,15 @@ const
 type
    StateType=record
                 accept:boolean; {True if accepting state}
-                if0:word;       {zero vector}
-                if1:word;       {one vector}
+                Vectors:array[1..ALPHALENGTH] of word;  {Vector table}
              end;
    MachineType=array [1..MAXSTATES] of StateType;
        {array used here for random-access}
    TraceType=^TraceData;
    TraceData=Record
                 State:integer;        {Current state}
-                Encountered:shortint; {What it encountered (0 for 0,1 for 1,
+                Encountered:integer;  {What it encountered (0... for
+                                       corresponding alphabetic characters,
                                        -1 for character not in alphabet}
                 WentTo:integer;       {Where it went}
                 next:TraceType;       {Pointer to next element}
@@ -168,6 +170,9 @@ procedure Instructions;
 const
    WasInGr:boolean=true;
 
+var
+   ArcCoords:ArcCoordsType;
+
 begin
 if not InGr then
    begin
@@ -184,8 +189,8 @@ Center(6,'(R)etrace machine runs the machine again with a new string.  (E)nter n
 Center(7,'machine lets you enter another machine for tracing.  (S)how execution shows');
 Center(8,'the path that the machine took.  Sa(V)e machine saves a machine to a disk');
 Center(9,'file. (L)oad machine loads a machine from a disk file. And e(X)it quits the');
-Center(10,'program.  The starting state is always 1.  The states are formed in memory');
-Center(11,'as shown below.');
+Center(10,'program.  The starting state is always 1.  The states execute as shown');
+Center(11,'below.');
 Circle(200,200,20);
 Circle(200,200,12);
 Line(220,200,240,200);
@@ -195,6 +200,15 @@ line(200,216,200,236);
 line(200,236,203,233);
 line(200,236,197,233);
 OutTextXY(224,190,'0');
+OutTextXY(190,219,'1');
+Arc(180,185,0,270,20);
+OutTextXY(160,158,'Else');
+GetArcCoords(ArcCoords);
+with ArcCoords do
+   begin
+   line(Xend,Yend,Xend-4,Yend-4);
+   line(Xend,Yend,Xend-4,Yend+4);
+   end;
 Pause(13);
 if not WasInGr then
    GoToText;
@@ -265,7 +279,7 @@ end;
 
 
 
-procedure GetMachineString;
+procedure GetMachineString(var MachineString:string);
 {
  Gets the string used by the machine.
 }
@@ -295,16 +309,20 @@ STRNG:=ds;
 end;
 
 
-procedure GetMachine;
+procedure GetMachine(var Machine:MachineType;
+                     var NumOfStates:integer;
+                     var MachineString:string);
 {
  Lets user input the machine in the form number of states, A,R (accepting or
  rejecting), and where to go on 0 and 1.
 }
 
 var
-   DString:string;
-   DNum,DNum2:integer;
+   DString,HasBeenEntered:string;
+   DNum,DNum2,DNum3:integer;
    WasInGr:boolean;
+   Jump:integer;
+   DCh:char;
 
 begin
 WasInGr:=InGr;
@@ -313,22 +331,46 @@ Centerln(1,'Enter your machine:');
 DNum:=GetInt('Enter number of states (1 - '+strng(MAXSTATES)+') >',1,maxstates);
 for DNum2:=1 to DNum do
    begin
+   for DNum3:=1 to ALPHALENGTH do
+      Machine[DNum2].Vectors[DNum3]:=0;
+   HasBeenEntered:='';
    writeln('State ',DNum2);
    case UpCase(GetChar('   (A)ccepting or (R)ejecting >','ARar')) of
       'A':Machine[DNum2].accept:=True;
       'R':Machine[DNum2].accept:=False;
       end;
-   Machine[DNum2].if0:=GetInt('   On 0 goto >',1,DNum);
-   Machine[DNum2].if1:=GetInt('   On 1 goto >',1,DNum);
+   repeat
+      begin
+      DCh:=GetChar('   on character >',ALPHABET+'*');
+      Jump:=GetInt('   go to        >',1,DNum);
+      if DCh='*' then
+         begin
+         for DNum3:=1 to ALPHALENGTH do
+            begin
+            if Machine[DNum2].Vectors[DNum3]=0 then
+               Machine[DNum2].vectors[DNum3]:=jump;
+            end;
+         end
+      else
+         begin
+         Machine[DNum2].Vectors[Pos(DCh,ALPHABET)]:=jump;
+         if pos(DCh,HasBeenEntered)=0 then
+            HasBeenEntered:=HasBeenEntered+DCh;
+         end;
+      end;
+   until (DCh='*') or (length(HasBeenEntered)=ALPHALENGTH);
    end;
-GetMachineString;
+GetMachineString(MachineString);
 NumOfStates:=DNum;
 DidTrace:=false;
 if WasInGr then
    GoToGraph;
 end;
 
-procedure Make(var l:TraceType;s:integer;e:shortint;w:integer);
+procedure Make(var l:TraceType;
+                   s:integer;
+                   e:integer;
+                   w:integer);
 {
  Makes a new list of TraceType using s for State,e for Encountered, and w for
  WhereTo.
@@ -342,7 +384,10 @@ l^.encountered:=e;
 l^.WentTo:=w;
 end;
 
-procedure Tack(var l:TraceType;s:Integer;e:shortint;w:integer);
+procedure Tack(var l:TraceType;
+                   s:Integer;
+                   e:integer;
+                   w:integer);
 {
  Functional equivalent of Append.
 }
@@ -378,7 +423,9 @@ until l=nil;
 end;
 
 
-Procedure TraceMachine;
+Procedure TraceMachine(   Machine:MachineType;
+                       var Traced:TraceType;
+                       MachineString:string);
 {
  Traces the machine 'Machine' using the string 'MachineString' and stores
  the results in the list 'Traced'.
@@ -401,17 +448,14 @@ At:=1;
 LastState:=Machine[at].accept;
 for Indx:=1 to length(MachineString) do
    begin
-   case MachineString[Indx] of
-      '0':Enc:=0;
-      '1':Enc:=1;
-      else
-         Enc:=-1;
-      end;
-   case Enc of
-      0:Jump:=Machine[at].if0;
-      1:Jump:=Machine[at].if1;
-      -1:Jump:=At;
-      end;
+   if Pos(MachineString[Indx],ALPHABET)=0 then
+      Enc:=-1
+   else
+      Enc:=Pos(MachineString[Indx],ALPHABET);
+   if Enc>0 then
+      Jump:=Machine[at].Vectors[Enc]
+   else
+      Jump:=At;
    if LInit then
       Tack(Traced,At,Enc,Jump)
    else
@@ -464,17 +508,20 @@ until ch in ['W','E','S','T','L','V','I','X'];
 Options:=ch;
 end;
 
-procedure ReTraceMachine;
+procedure ReTraceMachine(Machine:MachineType;
+                         Traced:TraceType;
+                         MachineString:string);
 
 begin
 GoToText;
 Cls;
 Write('Enter new string >');
 Readln(MachineString);
-TraceMachine;
+TraceMachine(Machine,Traced,MachineString);
 end;
 
-procedure ShowTrace;
+procedure ShowTrace(Traced:TraceType;
+                    Machine:MachineType);
 
 var
    BegL:TraceType;
@@ -502,7 +549,10 @@ while traced<>nil do
       1:write(OutF,'1');
       -1:write(OutF,'a non-alphabetic character');
       end;
-   writeln(OutF,' and went to ',Traced^.WentTo);
+   if Traced^.WentTo=Traced^.state then
+      writeln(OutF,' and stayed.')
+   else
+      writeln(OutF,' and went to ',Traced^.WentTo,'.');
    x:=Traced^.WentTo;
    Traced:=Traced^.next;
    end;
@@ -516,10 +566,10 @@ Traced:=BegL;
 pause(25);
 end;
 
-procedure ShowMachine;
+procedure ShowMachine(var Machine:MachineType);
 
 var
-   Indx:integer;
+   Indx,Indx2:integer;
    OutF:text;
    DevcSpec:string;
    WasInGr:boolean;
@@ -539,8 +589,10 @@ for Indx:=1 to NumOfStates do
       Writeln(OutF,' accepts')
    else
       Writeln(OutF,' rejects');
-   Writeln(OutF,'  on 0 go to state ',Machine[Indx].if0);
-   Writeln(OutF,'  on 1 go to state ',Machine[Indx].if1);
+   for Indx2:=1 to ALPHALENGTH do
+      begin
+      Writeln(' on ',ALPHABET[Indx2],' go to ',Machine[Indx].Vectors[Indx2]);
+      end;
    end;
 close(OutF);
 pause(25);
@@ -548,12 +600,12 @@ if WasInGr then
    GoToGraph;
 end;
 
-procedure SaveMachine;
+procedure SaveMachine(var Machine:MachineType);
 
 var
    FileSpec:string;
    OutF:text;
-   Indx:integer;
+   Indx,Indx2:integer;
    WasInGr:boolean;
 
 begin
@@ -566,10 +618,12 @@ if pos('.',FileSpec)=0 then
    FileSpec:=FileSpec+'.MAC';
 assign(OutF,FileSpec);
 ReWrite(OutF);
+Writeln(OutF,ALPHALENGTH);
 Writeln(OutF,NumOfStates);
 for Indx:=1 to NumOfStates do
    begin
-   Write(OutF,Machine[indx].if0,' ',Machine[indx].if1,' ');
+   for Indx:=1 to ALPHALENGTH do
+      Write(OutF,Machine[indx].Vectors[Indx2],' ');
    if Machine[indx].accept then
       Writeln(OutF,-1)
    else
@@ -580,13 +634,13 @@ if WasInGr then
    GoToGraph;
 end;
 
-procedure LoadMachine;
+procedure LoadMachine(var Machine:MachineType);
 {Loads}
 
 var
    FileSpec:string;
    InF:text;
-   Indx:integer;
+   Indx,Indx2:integer;
    Dir:SearchRec;
    WasInGr:boolean;
    Lines:byte;
@@ -629,7 +683,9 @@ Reset(InF);
 Readln(InF,NumOfStates);
 for Indx:=1 to numofstates do
    begin
-   Readln(InF,Machine[Indx].if0,Machine[Indx].if1,accept);
+   for Indx2:=1 to ALPHALENGTH do
+      Read(InF,Machine[Indx].Vectors[Indx2]);
+   Readln(accept);
    if accept=0 then
       Machine[Indx].accept:=false
    else
@@ -663,21 +719,21 @@ Repeat
    ch:=Options;
    case ch of
       'T':if DidTrace then
-             ReTraceMachine
+             ReTraceMachine(Machine,Traced,MachineString)
           else
              begin
-             GetMachineString;
-             TraceMachine;
+             GetMachineString(MachineString);
+             TraceMachine(Machine,Traced,MachineString);
              end;
       'E':begin
-          GetMachine;
-          TraceMachine;
+          GetMachine(Machine,NumOfStates,MachineString);
+          TraceMachine(Machine,Traced,MachineString);
           end;
-      'S':ShowTrace;
-      'L':LoadMachine;
+      'S':ShowTrace(Traced,Machine);
+      'L':LoadMachine(Machine);
       'I':Instructions;
-      'V':SaveMachine;
-      'W':ShowMachine;
+      'V':SaveMachine(Machine);
+      'W':ShowMachine(Machine);
       end;
    end;
 until ch='X';
