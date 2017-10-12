@@ -1,3 +1,29 @@
+{
+ A copious comment:
+ A machine is stored as an array of states.
+ A state is stored as a boolean to tell whether or not it accepts, and
+  vectors to tell where to go for each letter of alphabet.
+ The alphabet is stored as a string containing every character in that
+  alphabet.
+ To input a state, you must tell if it accepts, and where to go for each
+  character.
+ The '*' wildcard during state input denotes all characters that have
+  not been specified.
+ A machine file is stored as:
+
+  The number of characters in the alphabet.
+  The number of states in the machine.
+  from 1 to the number of states
+    where state x should go for each character,
+    last number is 0 if rejecting, -1 if accepting
+
+ The instructions have not been updated since the fixed alphabet version.
+  (it does have a good illustration)
+ Characters not in alphabet are treated as an else vector (as in illustration)
+ The trace is stored as a linked list.
+ The functions Make, Tack, and Kill belong to TraceList.
+}
+
 program DeterminantFiniteStateMachines;
 
 uses Crt,Graph,Dos;
@@ -7,16 +33,37 @@ const
    ALPHALENGTH=2;
    ALPHABET:string='01';
    DidTrace:boolean=false;
+   DidMachine:Boolean=false;
    CharHeight:integer=8;
    InGr:boolean = false;
    GrInit:boolean = false;
+   OptionArray:array [1..11] of string[19]=('[E]nter machine    ',  {1}
+                                           '[I]nstructions     ',   {2}
+                                           '[L]oad machine     ',   {3}
+                                           'e[X]it             ',   {4}
+                                           're[T]race machine  ',   {5}
+                                           '[T]race machine    ',   {6}
+                                           'sho[W] machine     ',   {7}
+                                           '[S]how execution   ',   {8}
+                                           'sa[V]e machine     ',   {9}
+                                           '[E]nter new machine',   {10}
+                                           'e[D]it machine     '); {11}
+   OptionsDidMachine:array[0..8] of integer=(8,2,10,3,9,6,7,11,4);
+   OptionsDidTrace:array[0..9] of integer=(9,2,10,3,9,5,7,8,11,4);
+   OptionsStart:array[0..4] of integer=(4,2,1,3,4);
+   KeysStart='IELX';
+   KeysDidMachine='IELXVTWD';
+   KeysDidTrace='IELXVTWSD';
 
 type
    StateType=record
                 accept:boolean; {True if accepting state}
                 Vectors:array[1..ALPHALENGTH] of word;  {Vector table}
              end;
-   MachineType=array [1..MAXSTATES] of StateType;
+	MachineType=record
+						Machine:array [1..MAXSTATES] of StateType;
+                  NumOfStates:integer;
+               end;
        {array used here for random-access}
    TraceType=^TraceData;
    TraceData=Record
@@ -30,18 +77,74 @@ type
 
 {---------------- Global Variables -----------------}
 var
-   Machine:MachineType; {Array to store the machine}
-   MachineString:string;{String the machine will use}
-   NumOfStates:integer; {Number of states the machine has (used by SaveMachine
-                         and LoadMachine)}
    MaxX,MaxY:word;      {X and Y resolution}
    Mode,Drivr:integer;  {Screen mode and driver #}
-   traced:TraceType;    {Linked list of the execution path}
-   LInit:boolean;       {Tells if the list has been initialized}
 
-procedure GoToText;forward;
+{-----------Procedure Table Of Contents------------------------------}
 
-procedure GoToGraph;forward;
+{-----------General Purpose Procedures-------------------------------}
+
+procedure GoToText; forward;
+procedure GoToGraph; forward;
+procedure ClearS; forward;
+procedure Cls; forward;
+procedure Center(row:integer;ToWrite:string); forward;
+procedure Centerln(row:integer;ToWrite:string); forward;
+procedure WriteAt(row,col:integer;ToWrite:string); forward;
+procedure Pause(line:integer); forward;
+
+{-----------Machine-Making procedures--------------------------------}
+
+procedure GetMachineString(var MachineString:string); forward;
+procedure FillInMachine(From,UpTo:integer;var M:MachineType); forward;
+procedure GetMachine(var M:MachineType); forward;
+
+{-----------Machine-Tracing procedures-------------------------------}
+
+procedure Make(var l:TraceType;s:integer;e:integer;w:integer); forward;
+procedure Tack(var l:TraceType;s:Integer;e:integer;w:integer); forward;
+procedure Kill(var l:tracetype); forward;
+procedure TraceMachine(var M:MachineType;var Traced:TraceType;MachineString:string;var LInit:boolean); forward;
+procedure ReTraceMachine(M:MachineType;Traced:TraceType;MachineString:string;LInit:boolean); forward;
+procedure ShowTrace(Traced:TraceType;var M:MachineType); forward;
+
+{-----------Machine Editing procedures-------------------------------}
+
+procedure DisplayVector(var M:MachineType;VectorRow,VectorCol,FirstRow,FirstCol,Color:integer); forward;
+procedure DisplayTable(FirstRow,LastRow,FirstCol,LastCol:integer;var M:MachineType); forward;
+procedure AddStates(var Ending:integer;var StartNum:integer;var M:MachineType); forward;
+procedure ChangeVector(var M:MachineType;State:integer;Vector:integer); forward;
+procedure IncCol(var M:MachineType;var Start,Nd,Current:integer); forward;
+procedure IncRow(var Start,Nd,Current:integer); forward;
+procedure DecAll(var Start,Nd,Current:integer); forward;
+procedure ChangeState(Start,Current:integer;var M:MachineType); forward;
+procedure EditStates(var Start,nd,Current:integer;StartRow,EndRow:integer;var M:MachineType); forward;
+procedure EditMachine(var M:MachineType); forward;
+
+{-----------Machine Transference procedures--------------------------}
+
+procedure ShowMachine(var M:MachineType); forward;
+procedure SaveMachine(var M:MachineType); forward;
+procedure LoadMachine(var M:MachineType); forward;
+
+{-----------Instructions---------------------------------------------}
+
+procedure Instructions; forward;
+
+{-----------Miscellaneous--------------------------------------------}
+
+procedure FindMaxCharHeight; forward;
+
+{-----------General-Purpose functions--------------------------------}
+
+function GetInt(Prompt:string;MnInt,MxInt:integer):integer; forward;
+function GetChar(Prompt:string;Acceptable:string):Char; forward;
+function Strng(d:integer):string; forward;
+function GetIntAt(X,Y:Integer;Prompt:string;MnInt,MxInt:integer):Integer; forward;
+
+{-----------Menu function--------------------------------------------}
+
+function Options:char; forward;
 
 procedure ClearS;
 {
@@ -87,7 +190,7 @@ else
    begin
    Gd:=0;
    Gm:=0;
-   InitGraph(Gd,Gm,'a:');
+   InitGraph(Gd,Gm,'');
    if GraphResult=grOk then
       begin
       MaxX:=GetMaxX;
@@ -100,7 +203,7 @@ else
    else
       begin
       Writeln('This Program Requires Graphics (any type)');
-      exit;
+      halt(1);
       end;
    end;
 end;
@@ -114,12 +217,18 @@ begin
 if GrInit then
    if InGr then
       begin
-      InGr:=False;
-      TextMode(LastMode);
-      end;
+			InGr:=False;
+			case LastMode of
+				mono:TextMode(mono);
+				bw40:textMode(bw80);
+				bw80:textmode(bw80);
+				co40,co80:textmode(co80);
+			end;
+		end;
+TextAttr:=White;
 end;
 
-procedure Center(row:integer;ToWrite:string);
+procedure Center;
 {
  Centers string 'ToWrite' on row 'row' for all screen modes.
 }
@@ -137,7 +246,7 @@ else
 end;
 
 
-procedure Centerln(row:integer;ToWrite:string);
+procedure Centerln;
 {
  Centers string 'ToWrite' on row 'row' and writes a CR-LF.
 }
@@ -148,7 +257,23 @@ if not InGr then
    Writeln;
 end;
 
-procedure Pause(line:integer);
+procedure WriteAt;
+
+{
+ Writes 'ToWrite' at row,col independent of screen mode.
+}
+
+begin
+if InGr then
+   OutTextXY(col*CharHeight,row*CharHeight,ToWrite)
+else
+   begin
+   GoToXY(col,row);
+   Write(ToWrite);
+   end;
+end;
+
+procedure Pause;
 {
  Writes 'Press a key when ready...' on line 'line' and waits for a keystroke.
  (independent of screen mode)
@@ -160,6 +285,7 @@ var
 begin
 Center(line,'Press a key when ready...');
 d:=ReadKey;
+Center(line,'                         ');
 end;
 
 procedure Instructions;
@@ -180,17 +306,46 @@ if not InGr then
    GoToGraph;
    end;
 Cls;
-Center(1,'This program traces finite automata (finite state machines).  The program will');
-Center(2,'ask you how many states the machine has.  It will then prompt you to input');
-Center(3,'whether or not a given state is accepting or rejecting and where each state');
-Center(4,'should jump in case of zero or one.  Then you give the program a string, and it');
-Center(5,'will trace the machine for you.  Then you will have a set of options:');
-Center(6,'(R)etrace machine runs the machine again with a new string.  (E)nter new');
-Center(7,'machine lets you enter another machine for tracing.  (S)how execution shows');
-Center(8,'the path that the machine took.  Sa(V)e machine saves a machine to a disk');
-Center(9,'file. (L)oad machine loads a machine from a disk file. And e(X)it quits the');
-Center(10,'program.  The starting state is always 1.  The states execute as shown');
-Center(11,'below.');
+Center(1,'This program traces finite automata (finite state machines).  The program will ');
+Center(2,'give you a menu to [E]nter a machine, [L]oad a file, come here, or e[X]it.     ');
+Center(3,'Entering a machine consists of entering the number of states in a machine, if  ');
+Center(4,'the state is an acceptance or rejection state, and where it sholud jump on     ');
+Center(5,'character X of the alphabet.  A useful character is the * character, which     ');
+Center(6,'repersents all characters not yet specified (an else vector).  The loading     ');
+Center(7,'process consists of prompting you for a filename, and loading the file.  The   ');
+Center(8,'default extension for all machine files is ''.MAC''.  If the file specification  ');
+Center(9,'is preceded by a *, the following string is treated as a directory wildcard,   ');
+Center(10,'and a directory listing is produced. (For example, **.MAC will display all     ');
+Center(11,'files with a ''.MAC'' extension.)  After a machine has been put into memory,     ');
+Pause(13);
+Cls;
+Center(1,'some items are added to the menu.  First, you now have the option of saving    ');
+Center(2,'your machine.  Save works just like load (with no directory function).  You    ');
+Center(3,'will also see [T]race, which allows you to enter a string and see if the       ');
+Center(4,'machine accepted or rejected it.  You will also see sho[W] machine, which      ');
+Center(5,'displays the machine in a table like the one shown below.  There is also the   ');
+Center(6,'e[D]it machine function, which I will now go into detail about.  When you start');
+Center(7,'the edit machine function, you will see the machine laid out in a fasion       ');
+Center(8,'resembling the show machine function.  But if you move the cursor keys, you    ');
+Center(9,'will notice that different numbers will flash.  The cursor is represented by    ');
+Center(10,'making the number that it is on flash.  To change a number, place the cursor   ');
+Center(11,'on that number and press Enter.  It will then prompt you for a vector to       ');
+Center(20,'  1   2   3   4   5   ');
+Center(21,'  A   R   R   R   R   ');
+Center(22,'  --------------------');
+Center(23,'0|1   3   5   2   4   ');
+Center(24,'1|2   4   1   3   5   ');
+Center(18,'Divisible by 5');
+Pause(13);
+Cls;
+Center(1,'replace the old vector.  ''A'' will add states to the machine.  The add command  ');
+Center(2,'uses the same format as the enter machine command.  ''S'' moves the cursor into  ');
+Center(3,'the accepting/rejecting field of the states and lets you change them.  And, the');
+Center(4,'Esc key leaves the editing screen.  After you do a trace, you have the option  ');
+Center(5,'of [S]howing the trace, which lists the path the program took to execute the   ');
+Center(6,'machine.  A note: when the machine is executed, all non-alphabetic characters  ');
+Center(7,'point to the state the machine is currently in. (A drawing is shown below for  ');
+Center(8,'the binary alphabet.)                                                          ');
 Circle(200,200,20);
 Circle(200,200,12);
 Line(220,200,240,200);
@@ -214,7 +369,7 @@ if not WasInGr then
    GoToText;
 end;
 
-function GetInt(Prompt:string;MnInt,MxInt:integer):integer;
+function GetInt;
 {
   pre:Prompt is a printable string
  post:MnInt<=GetInt<=MxInt
@@ -235,7 +390,7 @@ until (DInt>=MnInt) and (DInt<=MxInt);
 GetInt:=DInt;
 end;
 
-Function GetChar(Prompt:string;Acceptable:string):Char;
+Function GetChar;
 {
   pre:Prompt and Acceptable are printable strings
  post:GetChar is in Acceptable
@@ -279,7 +434,8 @@ end;
 
 
 
-procedure GetMachineString(var MachineString:string);
+procedure GetMachineString;
+
 {
  Gets the string used by the machine.
 }
@@ -296,7 +452,7 @@ if WasInGr then
    GoToGraph;
 end;
 
-function STRNG(d:integer):string;
+function Strng;
 {
  Functionized version of Str.
 }
@@ -305,72 +461,80 @@ var ds:string;
 
 begin
 Str(d,ds);
-STRNG:=ds;
+Strng:=ds;
 end;
 
 
-procedure GetMachine(var Machine:MachineType;
-                     var NumOfStates:integer;
-                     var MachineString:string);
-{
- Lets user input the machine in the form number of states, A,R (accepting or
- rejecting), and where to go on 0 and 1.
-}
+procedure FillInMachine;
 
 var
-   DString,HasBeenEntered:string;
-   DNum,DNum2,DNum3:integer;
-   WasInGr:boolean;
-   Jump:integer;
+   DNum2,DNum3:integer;
    DCh:char;
+   HasBeenEntered:string;
+   Jump:integer;
 
 begin
-WasInGr:=InGr;
-GoToText;
-Centerln(1,'Enter your machine:');
-DNum:=GetInt('Enter number of states (1 - '+strng(MAXSTATES)+') >',1,maxstates);
-for DNum2:=1 to DNum do
+for DNum2:=From to UpTo do
    begin
    for DNum3:=1 to ALPHALENGTH do
-      Machine[DNum2].Vectors[DNum3]:=0;
+      M.Machine[DNum2].Vectors[DNum3]:=0;
    HasBeenEntered:='';
    writeln('State ',DNum2);
    case UpCase(GetChar('   (A)ccepting or (R)ejecting >','ARar')) of
-      'A':Machine[DNum2].accept:=True;
-      'R':Machine[DNum2].accept:=False;
+      'A':M.Machine[DNum2].accept:=True;
+      'R':M.Machine[DNum2].accept:=False;
       end;
    repeat
       begin
       DCh:=GetChar('   on character >',ALPHABET+'*');
-      Jump:=GetInt('   go to        >',1,DNum);
+      Jump:=GetInt('   go to        >',1,upto);
       if DCh='*' then
          begin
          for DNum3:=1 to ALPHALENGTH do
             begin
-            if Machine[DNum2].Vectors[DNum3]=0 then
-               Machine[DNum2].vectors[DNum3]:=jump;
+            if M.Machine[DNum2].Vectors[DNum3]=0 then
+               M.Machine[DNum2].vectors[DNum3]:=jump;
             end;
          end
       else
          begin
-         Machine[DNum2].Vectors[Pos(DCh,ALPHABET)]:=jump;
+         M.Machine[DNum2].Vectors[Pos(DCh,ALPHABET)]:=jump;
          if pos(DCh,HasBeenEntered)=0 then
             HasBeenEntered:=HasBeenEntered+DCh;
          end;
       end;
    until (DCh='*') or (length(HasBeenEntered)=ALPHALENGTH);
    end;
-GetMachineString(MachineString);
-NumOfStates:=DNum;
+end;
+
+
+
+procedure GetMachine;
+{
+ Lets user input the machine in the form number of states, A,R (accepting or
+ rejecting), and where to go on 0 and 1.
+}
+
+var
+   DString:string;
+   DNum:integer;
+   WasInGr:boolean;
+
+begin
+WasInGr:=InGr;
+GoToText;
+Centerln(1,'Enter your machine:');
+DNum:=GetInt('Enter number of states (1 - '+Strng(MAXSTATES)+') >',1,maxstates);
+FillInMachine(1,DNum,M);
+M.NumOfStates:=DNum;
 DidTrace:=false;
+DidMachine:=true;
 if WasInGr then
    GoToGraph;
 end;
 
-procedure Make(var l:TraceType;
-                   s:integer;
-                   e:integer;
-                   w:integer);
+
+procedure Make;
 {
  Makes a new list of TraceType using s for State,e for Encountered, and w for
  WhereTo.
@@ -384,10 +548,8 @@ l^.encountered:=e;
 l^.WentTo:=w;
 end;
 
-procedure Tack(var l:TraceType;
-                   s:Integer;
-                   e:integer;
-                   w:integer);
+
+procedure Tack;
 {
  Functional equivalent of Append.
 }
@@ -405,7 +567,8 @@ l^.next:=l2;
 l:=begl;
 end;
 
-procedure Kill(var l:tracetype);
+
+procedure Kill;
 {
  Functional equivalent of KillList.
 }
@@ -423,9 +586,7 @@ until l=nil;
 end;
 
 
-Procedure TraceMachine(   Machine:MachineType;
-                       var Traced:TraceType;
-                       MachineString:string);
+Procedure TraceMachine;
 {
  Traces the machine 'Machine' using the string 'MachineString' and stores
  the results in the list 'Traced'.
@@ -439,13 +600,13 @@ var
 begin
 GoToGraph;
 Cls;
-if LInit then
+If LInit then
    begin
    Kill(Traced);
    LInit:=false;
    end;
 At:=1;
-LastState:=Machine[at].accept;
+LastState:=M.Machine[at].accept;
 for Indx:=1 to length(MachineString) do
    begin
    if Pos(MachineString[Indx],ALPHABET)=0 then
@@ -453,7 +614,7 @@ for Indx:=1 to length(MachineString) do
    else
       Enc:=Pos(MachineString[Indx],ALPHABET);
    if Enc>0 then
-      Jump:=Machine[at].Vectors[Enc]
+      Jump:=M.Machine[at].Vectors[Enc]
    else
       Jump:=At;
    if LInit then
@@ -464,7 +625,7 @@ for Indx:=1 to length(MachineString) do
       LInit:=True;
       end;
    At:=Jump;
-   LastState:=Machine[at].accept;
+   LastState:=M.Machine[at].accept;
    end;
 Center(1,'String');
 Center(2,MachineString);
@@ -473,11 +634,11 @@ if LastState then
 else
    Center(3,'Rejected');
 DidTrace:=true;
-pause(5);
+Pause(5);
 end;
 
 
-function Options:char;
+function Options;
 {
  Displays the post-trace menu and returns a character in the set of menu
  choices.
@@ -485,43 +646,54 @@ function Options:char;
 
 var
    ch:char;
+   Indx:integer;
+   Legal:string;
+   Cols:integer;
 
 begin
 GoToGraph;
-cls;
-center(1,'Your options are:');
-center(3,'sho[W] machine     ');
-center(4,'[E]nter machine    ');
-center(5,'[S]how execution   ');
-if DidTrace then
-   center(6,'re[T]race machine  ')
+Cls;
+Center(1,'Your options are:');
+if DidMachine then
+   if DidTrace then
+      begin
+      for Indx:=1 to OptionsDidTrace[0] do
+         Center(Indx+2,OptionArray[OptionsDidTrace[Indx]]);
+      Cols:=OptionsDidTrace[0];
+      Legal:=KeysDidTrace;
+      end
+   else
+      begin
+      for Indx:=1 to OptionsDidMachine[0] do
+         Center(Indx+2,OptionArray[OptionsDidMachine[Indx]]);
+      Cols:=OptionsDidMachine[0];
+      Legal:=KeysDidMachine;
+      end
 else
-   center(6,'[T]race machine    ');
-center(7,'[L]oad machine     ');
-Center(8,'sa[V]e machine     ');
-center(9,'[I]nstructions     ');
-center(10,'e[X]it             ');
-center(12,'Which shall you do???????');
+   begin
+   for Indx:=1 to OptionsStart[0] do
+      Center(Indx+2,OptionArray[OptionsStart[Indx]]);
+   Cols:=OptionsStart[0];
+   Legal:=KeysStart;
+   end;
+Center(3+cols+2,'Which shall you do???????');
 repeat
    ch:=UpCase(ReadKey);
-until ch in ['W','E','S','T','L','V','I','X'];
+until pos(ch,Legal)<>0;
 Options:=ch;
 end;
 
-procedure ReTraceMachine(Machine:MachineType;
-                         Traced:TraceType;
-                         MachineString:string);
+procedure ReTraceMachine;
 
 begin
 GoToText;
 Cls;
 Write('Enter new string >');
 Readln(MachineString);
-TraceMachine(Machine,Traced,MachineString);
+TraceMachine(M,Traced,MachineString,LInit);
 end;
 
-procedure ShowTrace(Traced:TraceType;
-                    Machine:MachineType);
+procedure ShowTrace;
 
 var
    BegL:TraceType;
@@ -539,16 +711,15 @@ Rewrite(OutF);
 while traced<>nil do
    begin
    write(OutF,'At ',Traced^.state:3,' (');
-   if Machine[Traced^.state].accept then
+   if M.Machine[Traced^.state].accept then
       write(OutF,'accepting')
    else
       write(OutF,'rejecting');
    write(OutF,'), I encountered ');
-   case Traced^.encountered of
-      0:write(OutF,'0');
-      1:write(OutF,'1');
-      -1:write(OutF,'a non-alphabetic character');
-      end;
+   if Traced^.encountered>0 then
+      Write(OutF,ALPHABET[Traced^.encountered])
+   else
+      Write(OutF,'a non-alphabetic character');
    if Traced^.WentTo=Traced^.state then
       writeln(OutF,' and stayed.')
    else
@@ -556,17 +727,17 @@ while traced<>nil do
    x:=Traced^.WentTo;
    Traced:=Traced^.next;
    end;
-Write('At ',x:3,' I ');
-if Machine[x].Accept then
-   Writeln('accepted')
+Write(OutF,'At ',x:3,' I ');
+if M.Machine[x].Accept then
+   Writeln(OutF,'accepted')
 else
-   Writeln('rejected');
+   Writeln(OutF,'rejected');
 close(OutF);
 Traced:=BegL;
-pause(25);
+Pause(25);
 end;
 
-procedure ShowMachine(var Machine:MachineType);
+procedure ShowMachine;
 
 var
    Indx,Indx2:integer;
@@ -576,31 +747,446 @@ var
 
 begin
 WasInGr:=InGr;
-GoToText;
+GoToGraph;
 Cls;
-Write('Output device (enter for screen) >');
-Readln(DevcSpec);
-assign(OutF,DevcSpec);
-Rewrite(OutF);
-for Indx:=1 to NumOfStates do
+for Indx:=1 to M.NumOfStates do
    begin
-   Write(OutF,'State ',Indx);
-   if Machine[Indx].accept then
-      Writeln(OutF,' accepts')
+   WriteAt(3,Indx*4+3,Strng(Indx));
+   if M.Machine[Indx].accept then
+      WriteAt(4,Indx*4+3,'A')
    else
-      Writeln(OutF,' rejects');
+      WriteAt(4,Indx*4+3,'R');
+   WriteAt(5,Indx*4+3,'---');
+   end;
+for Indx:=1 to ALPHALENGTH do
+   begin
+   WriteAt(Indx+5,4,Alphabet[Indx]+'|');
+   end;
+for Indx:=1 to M.NumOfStates do
+   begin
    for Indx2:=1 to ALPHALENGTH do
       begin
-      Writeln(' on ',ALPHABET[Indx2],' go to ',Machine[Indx].Vectors[Indx2]);
+      WriteAt(Indx2+5,Indx*4+3,Strng(M.Machine[Indx].Vectors[Indx2]));
       end;
    end;
-close(OutF);
-pause(25);
+Pause(25);
 if WasInGr then
-   GoToGraph;
+   GoToGraph
+else
+   GoToText;
 end;
 
-procedure SaveMachine(var Machine:MachineType);
+procedure DisplayVector;
+{
+ Writes the machine vector for character VectorRow in state VectorCol.
+}
+
+var
+  LastAttr:Byte;
+  Formula1,Formula2:integer;
+
+begin
+LastAttr:=TextAttr;
+TextAttr:=byte(Color);
+Formula1:=((VectorCol-FirstCol)*4)+3;
+Formula2:=VectorRow-FirstRow+5;
+GoToXY(Formula1,Formula2);
+Write('    ');
+GoToXY(Formula1,Formula2);
+Write(M.Machine[VectorCol].Vectors[VectorRow]);
+TextAttr:=LastAttr;
+end;
+
+
+procedure DisplayTable;
+{
+ Writes a table for the machine (like ShowMachine)
+}
+
+var
+   DInt,Indx,Indx2:integer;
+
+begin
+for Indx:=FirstCol to LastCol do
+   begin
+   DInt:=((Indx-FirstCol)*4)+3;
+   GoToXY(DInt,2);
+   Write('    ');
+   GoToXY(DInt,2);
+   Write(Indx);
+   GoToXY(DInt,3);
+   if M.Machine[Indx].Accept then
+      Write('A')
+   else
+      Write('R');
+   GoToXY(DInt,4);
+   Write('----');
+   end;
+for Indx:=FirstRow to LastRow do
+   begin
+   GoToXY(1,Indx-FirstRow+5);
+   Write(Alphabet[Indx],'| ');
+   end;
+For Indx:=FirstCol to LastCol do
+   for Indx2:=FirstRow to LastRow do
+      begin
+      DisplayVector(M,Indx2,Indx,FirstRow,FirstCol,White);
+      end;
+end;
+
+procedure AddStates;
+{
+ Adds extra states onto the machine.
+}
+
+var
+   DNum:integer;
+
+begin
+Cls;
+Centerln(1,'Enter extra states:');
+DNum:=GetInt('How many extra states do you want? >',1,MAXSTATES-M.NumOfStates);
+FillInMachine(M.NumOfStates+1,M.NumOfStates+DNum,M);
+M.NumOfStates:=M.NumOfStates+DNum;
+StartNum:=1;
+if M.NumOfStates>19 then
+   Ending:=19
+else
+   Ending:=M.NumOfStates;
+Cls;
+end;
+
+function GetIntAt;
+
+var
+   DInt,DInt2:integer;
+   DString:string;
+   DCh:char;
+
+begin
+repeat
+   begin
+   GoToXY(x,y);
+   write(Prompt);
+   readln(DInt);
+   if (Dint<MnInt) or (DInt>MxInt) then
+      begin
+      GoToXY(x,y);
+      for DInt:=1 to length(prompt)+length(Strng(DInt)) do
+         Write(' ');
+      GoToXY(x,y);
+      DString:='Number must be between '+Strng(MnInt)+' and '+Strng(MxInt)+
+                  '.  Press a key...';
+      Writeln(DString);
+      DCh:=ReadKey;
+      GoToXY(x,y);
+      for DInt:=1 to length(DString) do
+         Write(' ');
+      end;
+   end;
+until (DInt>=MnInt) and (DInt<=MxInt);
+GetIntAt:=DInt;
+GoToXY(x,y);
+for DInt2:=1 to length(Prompt)+Length(Strng(DInt)) do
+   Write(' ');
+end;
+
+
+
+procedure ChangeVector;
+{
+ Changes vector for character Vector in state State.
+}
+
+var
+   DNum:integer;
+
+begin
+DNum:=GetIntAt(1,1,'Old vector was '+Strng(M.Machine[State].Vectors[Vector])+
+                   '.  New vector is >',1,M.NumOfStates);
+M.Machine[State].Vectors[Vector]:=DNum;
+end;
+
+procedure IncCol;
+{
+ Scrolls table left (called Inc because it scoots the range forward one.
+}
+
+begin
+Inc(Nd);
+if Nd>M.NumOfStates then
+   Dec(Nd)
+else
+   begin
+   Inc(Start);
+   Inc(Current);
+   end;
+if Current>Nd then
+   Current:=Nd;
+end;
+
+procedure IncRow;
+{
+ Scrolls table up.
+}
+
+begin
+Inc(Nd);
+if Nd>ALPHALENGTH then
+   Dec(Nd)
+else
+   begin
+   Inc(Start);
+   Inc(Current);
+   end;
+if Current>Nd then
+   Current:=Nd
+end;
+
+procedure DecAll;
+{
+ Scrolls table left or down (ambiguous parameters, specificity not needed)
+}
+
+begin
+Dec(Start);
+if Start<1 then
+   Inc(Start)
+else
+   begin
+   Dec(Nd);
+   Dec(Current);
+   end;
+if Current<Start then
+   Current:=Start;
+end;
+
+procedure ChangeState;
+{
+ prompts user for an A or R.
+}
+
+var
+   Indx:integer;
+   DCh:Char;
+   DString,DString2:String;
+
+begin
+Repeat
+   begin
+   GoToXY(1,1);
+   DString:='Old state was ';
+   if m.Machine[Current].accept then
+      DString:=DString+'accepting'
+   else
+      DString:=DString+'rejecting';
+   DString:=DString+'.  What should I make it? (A/R) >';
+   Write(DString);
+   Readln(DString2);
+   DCh:=DString2[1];
+   GoToXY(1,1);
+   for Indx:=1 to length(DString)+Length(DString2) do
+      Write(' ');
+   if not (UpCase(DCh) in ['A','R']) then
+      begin
+      gotoXY(1,1);
+      DString:='The character must be A or R. Press a key.';
+      Write(DString);
+      DString[5]:=ReadKey;
+      for Indx:=1 to length(DString) do
+         Write(' ');
+      end;
+   end;
+until UpCase(DCh) in ['A','R'];
+if UpCase(DCh)='A' then
+   M.Machine[Current].Accept:=True
+else
+   M.Machine[Current].Accept:=False;
+end;
+
+procedure EditStates;
+
+{
+ Procedure for editing acceptance/rejection.
+}
+
+const
+   ROW=3;
+   WantsToEnd:boolean=False;
+
+var
+   DCh:Char;
+   Formula:integer;
+   Old:integer;
+   Moved:boolean;
+
+begin
+Old:=Current;
+repeat
+   begin
+   Moved:=False;
+   Formula:=((Current-Start)*4)+3;
+   GoToXY(Formula,ROW);
+   TextAttr:=White+Blink;
+   if M.Machine[Current].Accept then
+      Write('A')
+   else
+      Write('R');
+   TextAttr:=White;
+   DCh:=UpCase(ReadKey);
+   if DCh=#0 then
+      DCh:=UpCase(ReadKey);
+   case DCh of
+      #13:ChangeState(Start,Current,M);
+      #27:WantsToEnd:=True;
+      'K':begin
+          Dec(Current);
+          if Current<Start then
+             begin
+             Moved:=True;
+             DecAll(Start,nd,Current);
+             end;
+          end;
+      'M':begin
+          Inc(Current);
+          if Current>Nd then
+             begin
+             Moved:=True;
+             IncCol(M,Start,Nd,Current);
+             end;
+          end;
+      end;
+   if (Moved=True) and (Old<>Current) then
+      DisplayTable(StartRow,EndRow,Start,nd,M);
+   GoToXY(Formula,ROW);
+   TextAttr:=White;
+   if M.Machine[Old].Accept then
+      Write('A')
+   else
+      Write('R');
+   Old:=Current;
+   end;
+until WantsToEnd;
+end;
+
+
+procedure EditMachine;
+
+{
+ Basically a spreadsheet procedure.
+}
+
+Const
+   Col=false;
+   Row=true;
+
+var
+   CurrentRow,CurrentCol,StartRow,StartCol:integer;
+   DCh:char;
+   Cols,Rows,EndCol,EndRow:integer;
+   OldRow,OldCol:integer;
+   WantsToEnd:boolean;
+   Moved:boolean;
+
+begin
+GoToText;
+Cls;
+if M.NumOfStates<20 then
+   Cols:=M.NumOfStates
+else
+   Cols:=19;
+StartCol:=1;
+EndCol:=Cols;
+if M.NumOfStates<21 then
+   Rows:=M.NumOfStates
+else
+   Rows:=20;
+StartRow:=1;
+if ALPHALENGTH<21 then
+   EndRow:=ALPHALENGTH
+else
+   EndRow:=20;
+OldRow:=1;
+OldCol:=1;
+DisplayTable(StartRow,EndRow,StartCol,EndCol,M);
+CurrentRow:=StartRow;
+CurrentCol:=StartCol;
+WantsToEnd:=false;
+repeat
+   begin
+   DisplayVector(M,CurrentRow,CurrentCol,StartRow,StartCol,LightGray*16);
+   GoToXY(1,1);
+   Moved:=False;
+   Write('Command>');
+   DCh:=UpCase(ReadKey);
+   if DCh in ['A'..'Z'] then
+      Write(DCh);
+   if DCh=#0 then
+      begin
+      DCh:=ReadKey;
+      end;
+   case DCh of
+      'A':AddStates(EndCol,StartCol,M);
+      #13:ChangeVector(M,CurrentCol,CurrentRow);
+      'H':begin
+          Dec(CurrentRow);
+          Write(#24);
+          if CurrentRow<StartRow then
+             begin
+             Moved:=True;
+             DecAll(StartRow,EndRow,CurrentRow);
+             end;
+          end;
+      'K':begin
+          Dec(CurrentCol);
+          Write(#27);
+          if CurrentCol<StartCol then
+             begin
+             Moved:=True;
+             DecAll(StartCol,EndCol,CurrentCol);
+             end;
+          end;
+      'M':begin
+          Inc(CurrentCol);
+          Write(#26);
+          if CurrentCol>EndCol then
+             begin
+             Moved:=True;
+             IncCol(M,StartCol,EndCol,CurrentCol);
+             end;
+          end;
+      'P':begin
+          Inc(CurrentRow);
+          Write(#25);
+          if CurrentRow>EndRow then
+             begin
+             Moved:=True;
+             IncRow(StartRow,EndRow,CurrentRow);
+             end;
+          end;
+      #27:WantsToEnd:=true;
+      'S':begin
+          DisplayVector(M,CurrentRow,CurrentCol,StartRow,StartCol,White);
+          EditStates(StartCol,EndCol,CurrentCol,StartRow,EndRow,M);
+          end;
+      end;
+   if (DCh='A') or (Moved and ((CurrentCol<>OldCol) or (CurrentRow<>OldRow)))
+                                                                          then
+      begin
+      if CurrentCol>EndCol then
+         CurrentCol:=EndCol;
+      DisplayTable(StartRow,EndRow,StartCol,EndCol,M);
+      end;
+   DisplayVector(M,OldRow,OldCol,StartRow,StartCol,White);
+   OldRow:=CurrentRow;
+   OldCol:=CurrentCol;
+   end;
+until WantsToEnd=true;
+end;
+
+
+
+procedure SaveMachine;
 
 var
    FileSpec:string;
@@ -619,12 +1205,12 @@ if pos('.',FileSpec)=0 then
 assign(OutF,FileSpec);
 ReWrite(OutF);
 Writeln(OutF,ALPHALENGTH);
-Writeln(OutF,NumOfStates);
-for Indx:=1 to NumOfStates do
+Writeln(OutF,M.NumOfStates);
+for Indx:=1 to M.NumOfStates do
    begin
-   for Indx:=1 to ALPHALENGTH do
-      Write(OutF,Machine[indx].Vectors[Indx2],' ');
-   if Machine[indx].accept then
+   for Indx2:=1 to ALPHALENGTH do
+      Write(OutF,M.Machine[indx].Vectors[Indx2],' ');
+   if M.Machine[indx].accept then
       Writeln(OutF,-1)
    else
       Writeln(OutF,0);
@@ -634,13 +1220,13 @@ if WasInGr then
    GoToGraph;
 end;
 
-procedure LoadMachine(var Machine:MachineType);
+procedure LoadMachine;
 {Loads}
 
 var
    FileSpec:string;
    InF:text;
-   Indx,Indx2:integer;
+   Indx,Indx2,Alphanum:integer;
    Dir:SearchRec;
    WasInGr:boolean;
    Lines:byte;
@@ -668,7 +1254,7 @@ repeat
          if lines=22 then
             begin
             Lines:=0;
-            pause(23);
+            Pause(23);
             writeln;
             end;
          FindNext(dir);
@@ -676,28 +1262,45 @@ repeat
       end;
    end;
 until DidDir=false;
+M.NumOfStates:=0;
 if pos('.',filespec)=0 then
    filespec:=filespec+'.MAC';
 assign(InF,filespec);
 Reset(InF);
-Readln(InF,NumOfStates);
-for Indx:=1 to numofstates do
+Readln(InF,Alphanum);
+if Alphanum<>ALPHALENGTH then
    begin
-   for Indx2:=1 to ALPHALENGTH do
-      Read(InF,Machine[Indx].Vectors[Indx2]);
-   Readln(accept);
-   if accept=0 then
-      Machine[Indx].accept:=false
-   else
-      Machine[Indx].accept:=true;
+   Writeln('This file has a different alphabet!!! I can''t load this!');
+   Pause(25);
+   end
+else
+   begin
+   Readln(InF,M.NumOfStates);
+   for Indx:=1 to M.NumOfStates do
+     begin
+      for Indx2:=1 to ALPHALENGTH do
+         Read(InF,M.Machine[Indx].Vectors[Indx2]);
+      Readln(InF,accept);
+      if accept=0 then
+         M.Machine[Indx].accept:=false
+      else
+         M.Machine[Indx].accept:=true;
+      end;
    end;
 close(Inf);
 if WasInGr then
    GoToGraph;
-DidTrace:=false
+if M.NumOfStates<>0 then
+   begin
+   DidTrace:=false;
+   DidMachine:=true;
+   end;
 end;
 
-procedure Driver;
+procedure Driver(var M:MachineType;
+                 var MachineString:String;
+                 Traced:TraceType;
+                 var LInit:boolean);
 
 var
    Indx:word;
@@ -706,45 +1309,52 @@ var
 
 begin
 GoToGraph;
-SetTextStyle(0,0,3);
 Cls;
 FindMaxCharHeight;
 Centerln(1,'Determinant');
 Centerln(2,'Finite');
 Centerln(3,'Automata');
 Centerln(4,'Tracer');
-pause(6);
+Pause(6);
 Repeat
    begin
    ch:=Options;
    case ch of
-      'T':if DidTrace then
-             ReTraceMachine(Machine,Traced,MachineString)
-          else
-             begin
-             GetMachineString(MachineString);
-             TraceMachine(Machine,Traced,MachineString);
-             end;
-      'E':begin
-          GetMachine(Machine,NumOfStates,MachineString);
-          TraceMachine(Machine,Traced,MachineString);
-          end;
-      'S':ShowTrace(Traced,Machine);
-      'L':LoadMachine(Machine);
+      'E':GetMachine(M);
+      'L':LoadMachine(M);
       'I':Instructions;
-      'V':SaveMachine(Machine);
-      'W':ShowMachine(Machine);
       end;
+   if DidMachine then
+      case ch of
+         'T':if DidTrace then
+                ReTraceMachine(M,Traced,MachineString,LInit)
+             else
+                begin
+                GetMachineString(MachineString);
+                TraceMachine(M,Traced,MachineString,LInit);
+                end;
+         'S':ShowTrace(Traced,M);
+         'V':SaveMachine(M);
+         'W':ShowMachine(M);
+         'D':EditMachine(M);
+         end;
    end;
 until ch='X';
 GoToText;
-cls;
+Cls;
 Centerln(1,'Goodbye!');
 end;
 
+var
+   M:MachineType; {Array to store the machine}
+   MachineString:string;{String the machine will use}
+   traced:TraceType;    {Linked list of the execution path}
+   LInit:boolean;       {Tells if the list has been initialized}
+
 begin
+TextAttr:=White;
 LInit:=False;
-Driver;
+Driver(M,MachineString,Traced,LInit);
 GoToText;
 end.
 

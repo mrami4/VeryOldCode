@@ -9,4 +9,8 @@ I know it was started in TIP '88, but the last version is massively revised, so 
 Massive creeping featureitis.
 
 * Language: Turbo Pascal
-* Date 6/23/88
+* Date: 1988?
+
+Screenshot:
+
+![screenshot](screenshot.png)
